@@ -1,0 +1,1213 @@
+
+
+<script lang="ts">
+  import { onMount } from 'svelte';
+
+  
+let tasks = $state([
+  {
+    title: 'Menyelesaikan pekerjaan utama',
+    time: '09.00',
+    done: false,
+    type: 'routine',
+    repeat: 'daily',
+    days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'],
+    date: '',
+    deadline: '',
+    priority: 'high',
+    duration: 60,
+    status: 'todo'
+  },
+  {
+    title: 'Belajar dan mengembangkan Personal OS',
+    time: '19.00',
+    done: false,
+    type: 'routine',
+    repeat: 'daily',
+    days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'],
+    date: '',
+    deadline: '',
+    priority: 'medium',
+    duration: 45,
+    status: 'todo'
+  },
+  {
+    title: 'Evaluasi kegiatan hari ini',
+    time: '21.00',
+    done: false,
+    type: 'routine',
+    repeat: 'daily',
+    days: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'],
+    date: '',
+    deadline: '',
+    priority: 'low',
+    duration: 15,
+    status: 'todo'
+  }
+]);
+
+
+  let newTask = $state('');
+  let hasLoaded = $state(false);
+
+let taskType = $state('once');
+let taskRepeat = $state('weekly');
+let taskDays = $state(['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat']);
+let taskDate = $state('');
+let taskTime = $state('09:00');
+let taskDeadline = $state('');
+let taskPriority = $state('medium');
+let taskDuration = $state(30);
+
+let editingIndex = $state(-1);
+let today = $state(new Date().toLocaleDateString('en-CA'));
+let dailyChecks = $state<Record<string, string[]>>({});
+
+  let completedTasks = $derived(
+    tasks.filter((task) => task.done).length
+  );
+
+  onMount(() => {
+    try {
+      const savedTasks = localStorage.getItem('personal-os-tasks');
+
+const savedChecks = localStorage.getItem('personal-os-daily-checks');
+
+if (savedChecks) {
+  dailyChecks = JSON.parse(savedChecks);
+}
+      if (savedTasks) {
+        const parsedTasks = JSON.parse(savedTasks);
+
+        if (Array.isArray(parsedTasks)) {
+          tasks = parsedTasks.map((task) => ({
+        ...task,
+        id: task.id || crypto.randomUUID()
+}));
+}
+      }
+    } catch (error) {
+      console.error('Gagal membaca tugas tersimpan:', error);
+    }
+
+    hasLoaded = true;
+  });
+
+  $effect(() => {
+  if (!hasLoaded) return;
+
+  localStorage.setItem('personal-os-tasks', JSON.stringify(tasks));
+
+  localStorage.setItem(
+    'personal-os-daily-checks',
+    JSON.stringify(dailyChecks)
+  );
+});
+
+  function isTaskDoneToday(task) {
+  return dailyChecks[today]?.includes(task.id) ?? false;
+}
+
+function toggleTaskToday(task, checked) {
+  const currentChecks = dailyChecks[today] ?? [];
+
+  if (checked && !currentChecks.includes(task.id)) {
+    dailyChecks = {
+      ...dailyChecks,
+      [today]: [...currentChecks, task.id]
+    };
+  } else if (!checked) {
+    dailyChecks = {
+      ...dailyChecks,
+      [today]: currentChecks.filter((id) => id !== task.id)
+    };
+  }
+}
+function addTask() {
+  if (!newTask.trim()) return;
+
+  const task = {
+    id: crypto.randomUUID(),
+    title: newTask.trim(),
+    time: taskTime,
+    done: false,
+    type: taskType,
+    repeat: taskType === 'routine' ? taskRepeat : 'once',
+    days: taskType === 'routine' ? [...taskDays] : [],
+    date: taskDate,
+    deadline: taskDeadline,
+    priority: taskPriority,
+    duration: taskDuration,
+    status: 'todo'
+  };
+
+  if (editingIndex >= 0) {
+    tasks = tasks.map((item, index) =>
+      index === editingIndex ? { ...item, ...task } : item
+    );
+  } else {
+    tasks = [...tasks, task];
+  }
+
+  newTask = '';
+  editingIndex = -1;
+}
+
+
+function editTask(index: number) {
+  const task = tasks[index];
+
+  newTask = task.title;
+  taskType = task.type ?? 'once';
+  taskRepeat = task.repeat ?? 'weekly';
+  taskDays = Array.isArray(task.days) ? [...task.days] : [];
+  taskDate = task.date ?? '';
+  taskTime = task.time ?? '09:00';
+  taskDeadline = task.deadline ?? '';
+  taskPriority = task.priority ?? 'medium';
+  taskDuration = task.duration ?? 30;
+
+  editingIndex = index;
+}
+
+function deleteTask(index: number) {
+  const confirmed = confirm('Yakin ingin menghapus kegiatan ini?');
+
+  if (!confirmed) return;
+
+  tasks = tasks.filter((_, i) => i !== index);
+
+  if (editingIndex === index) {
+    newTask = '';
+    editingIndex = -1;
+  } else if (editingIndex > index) {
+    editingIndex -= 1;
+  }
+}
+
+function getTodayDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayName() {
+  const days = [
+    'Minggu',
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu'
+  ];
+
+  return days[new Date().getDay()];
+}
+
+function isTaskScheduledToday(task: (typeof tasks)[number]) {
+  const today = getTodayDate();
+  const todayName = getTodayName();
+
+  if (task.type === 'routine') {
+    if (task.repeat === 'monthly') {
+      return task.date !== '' &&
+        Number(task.date.split('-')[2]) === Number(today.split('-')[2]);
+    }
+
+    if (task.repeat === 'weekly' || task.repeat === 'daily') {
+      return Array.isArray(task.days) && task.days.includes(todayName);
+    }
+
+    return false;
+  }
+
+  // Tugas dadakan hanya berlaku pada tanggal yang dipilih.
+  return task.date === today;
+}
+
+</script>
+ 
+
+<svelte:head>
+  <title>Personal OS</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+  <meta
+    name="description"
+    content="Dashboard produktivitas dan keuangan pribadi."
+  />
+</svelte:head>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-icon">P</span> Personal OS</div>
+
+    <p class="menu-label">MENU UTAMA</p>
+    <a class="nav active" href="#dashboard">▦ <span>Dashboard</span></a>
+    <a class="nav" href="#jadwal">◷ <span>Jadwal</span></a>
+    <a class="nav" href="#tugas">✓ <span>Tugas</span></a>
+    <a class="nav" href="#keuangan">↗ <span>Keuangan</span></a>
+    <a class="nav" href="#tabungan">◎ <span>Tabungan</span></a>
+
+    <div class="sidebar-note">
+      <div class="note-icon">✦</div>
+      <strong>Pelan-pelan, tetap maju.</strong>
+      <p>Kemajuan kecil setiap hari akan menjadi hasil besar.</p>
+    </div>
+
+    <div class="profile">
+      <div class="avatar">B</div>
+      <div><strong>My Workspace</strong><small>Personal account</small></div>
+    </div>
+  </aside>
+
+  <main id="dashboard" class="main">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">WORKSPACE / DASHBOARD</span>
+        <h1>Dashboard</h1>
+      </div>
+      <div class="today"><span>●</span> Ruang pribadi</div>
+    </header>
+
+    <section class="welcome">
+      <div class="welcome-copy">
+        <span class="welcome-tag">YOUR PERSONAL SPACE</span>
+        <h2>Selamat datang kembali! 👋</h2>
+        <p>Atur hari ini dengan tenang. Fokus pada hal yang paling penting.</p>
+      </div>
+      <div class="welcome-art" aria-hidden="true">
+        <div class="sun"></div>
+        <div class="hill hill-back"></div>
+        <div class="hill hill-front"></div>
+        <div class="art-star">✦</div>
+      </div>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card">
+        <div class="stat-top"><span>Tugas selesai</span><span class="stat-icon purple">✓</span></div>
+        <div class="stat-number">{completedTasks}<small> / {tasks.length}</small></div>
+        <div class="progress"><span style={`width: ${tasks.length ? completedTasks / tasks.length * 100 : 0}%`}></span></div>
+        <p>Terus bergerak sesuai kemampuanmu.</p>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-top"><span>Pemasukan bulan ini</span><span class="stat-icon green">↗</span></div>
+        <div class="stat-number">Rp0</div>
+        <p class="muted">Belum ada transaksi dicatat</p>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-top"><span>Pengeluaran bulan ini</span><span class="stat-icon orange">↘</span></div>
+        <div class="stat-number">Rp0</div>
+        <p class="muted">Belum ada transaksi dicatat</p>
+      </article>
+    </section>
+
+    <section class="content-grid">
+      <article id="tugas" class="panel task-panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">DAILY PLANNER</span><h3>Checklist hari ini</h3></div>
+          <span class="count">{completedTasks}/{tasks.length}</span>
+        </div>
+
+        
+<form class="add-task" onsubmit={(event) => { event.preventDefault(); addTask(); }}>
+  <input
+    bind:value={newTask}
+    placeholder="Nama kegiatan..."
+    aria-label="Nama kegiatan"
+    required
+  />
+
+  <select bind:value={taskType} aria-label="Jenis kegiatan">
+    <option value="once">Tugas dadakan</option>
+    <option value="routine">Jadwal rutin</option>
+  </select>
+
+  {#if taskType === 'routine'}
+    <select bind:value={taskRepeat} aria-label="Pengulangan">
+      <option value="daily">Daily — setiap hari terpilih</option>
+      <option value="weekly">Weekly — setiap minggu</option>
+      <option value="monthly">Monthly — setiap bulan</option>
+    </select>
+
+    <div class="day-picker">
+      <span>Pilih hari:</span>
+      {#each ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] as day}
+        <label>
+          <input
+            type="checkbox"
+            checked={taskDays.includes(day)}
+            onchange={() => {
+              taskDays = taskDays.includes(day)
+                ? taskDays.filter((item) => item !== day)
+                : [...taskDays, day];
+            }}
+          />
+          {day}
+        </label>
+      {/each}
+    </div>
+  {/if}
+
+  <label>
+    Tanggal kegiatan
+    <input type="date" bind:value={taskDate} />
+  </label>
+
+  <label>
+    Jam
+    <input type="time" bind:value={taskTime} required />
+  </label>
+
+  <label>
+    Deadline
+    <input type="date" bind:value={taskDeadline} />
+  </label>
+
+  <label>
+    Prioritas
+    <select bind:value={taskPriority}>
+      <option value="low">Rendah</option>
+      <option value="medium">Sedang</option>
+      <option value="high">Tinggi</option>
+    </select>
+  </label>
+
+  <label>
+    Estimasi durasi (menit)
+    <input type="number" min="5" step="5" bind:value={taskDuration} required />
+  </label>
+
+  <button type="submit">
+    {editingIndex >= 0 ? 'Simpan perubahan' : 'Tambah kegiatan'}
+  </button>
+</form>
+
+
+        
+<div class="task-list">
+  {#each tasks.filter((task) => task.type === 'routine') as task, index}
+    <div class="task-row">
+      <label class:completed={isTaskDoneToday(task)}>
+        <input
+        type="checkbox"
+        checked={isTaskDoneToday(task)}
+         onchange={(event) =>
+        toggleTaskToday(task, event.currentTarget.checked)}
+/>
+        <span class="task-text">
+          {task.title}
+          <small>
+            {task.time}
+            {#if task.type === 'routine'}
+              · Rutin {task.repeat}
+            {:else}
+              · Dadakan
+            {/if}
+            · Prioritas {task.priority ?? 'medium'}
+            {#if task.deadline}
+              · Deadline {task.deadline}
+            {/if}
+          </small>
+        </span>
+      </label>
+
+      <div class="task-actions">
+        <button type="button" onclick={() => editTask(index)}>
+          Edit
+        </button>
+        <button type="button" onclick={() => deleteTask(index)}>
+          Hapus
+        </button>
+      </div>
+    </div>
+  {/each}
+</div>
+<h3 class="section-title">Tugas Dadakan</h3>
+
+<div class="task-list">
+  {#each tasks.filter((task) => task.type !== 'routine') as task, index}
+    <div class="task-row">
+      <label class:completed={isTaskDoneToday(task)}>
+        <input
+          type="checkbox"
+          checked={isTaskDoneToday(task)}
+          onchange={(event) =>
+            toggleTaskToday(task, event.currentTarget.checked)}
+        />
+        <span class="task-text">
+          {task.title}
+          <small>
+            {task.time} · Deadline {task.deadline || 'Belum ditentukan'}
+          </small>
+        </span>
+      </label>
+
+      <div class="task-actions">
+        <button type="button" onclick={() => editTask(tasks.indexOf(task))}>
+          Edit
+        </button>
+        <button type="button" onclick={() => deleteTask(tasks.indexOf(task))}>
+          Hapus
+        </button>
+      </div>
+    </div>
+  {/each}
+</div>
+        <p class="helper">Centang kegiatan yang sudah kamu selesaikan.</p>
+      </article>
+
+      <article id="jadwal" class="panel focus-panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">DAILY INTENTION</span><h3>Fokus hari ini</h3></div>
+          <span class="focus-spark">✳</span>
+        </div>
+        <div class="focus-circle"><div><strong>{tasks.length ? Math.round(completedTasks / tasks.length * 100) : 0}%</strong><small>PROGRESS</small></div></div>
+        <p class="focus-message">Kamu tidak harus menyelesaikan semuanya sekaligus.</p>
+        <div class="focus-tip"><span>✦</span><p>Pilih satu tugas penting, lalu mulai dari langkah terkecil.</p></div>
+      </article>
+
+      <article id="keuangan" class="panel finance-panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">MONEY OVERVIEW</span><h3>Ringkasan keuangan</h3></div>
+          <span class="stat-icon green">↗</span>
+        </div>
+        <div class="finance-balance"><small>Saldo tercatat (contoh awal)</small><strong>Rp0</strong><p>Angka akan diperbarui setelah fitur transaksi dibuat.</p></div>
+        <div class="finance-row"><span><i class="dot income"></i>Pemasukan</span><strong>Rp0</strong></div>
+        <div class="finance-row"><span><i class="dot expense"></i>Pengeluaran</span><strong>Rp0</strong></div>
+        <div class="finance-row"><span><i class="dot savings"></i>Tabungan</span><strong>Rp0</strong></div>
+      </article>
+
+      <article id="tabungan" class="panel savings-panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">FUTURE YOU</span><h3>Target tabungan</h3></div>
+          <span class="stat-icon purple">◎</span>
+        </div>
+        <div class="savings-empty">
+          <div class="savings-illustration">◎</div>
+          <strong>Mulai bangun targetmu</strong>
+          <p>Buat tujuan tabungan pertamamu, lalu pantau progresnya di sini.</p>
+          <span class="coming-soon">FITUR BERIKUTNYA</span>
+        </div>
+      </article>
+    </section>
+
+    <footer>PERSONAL OS <span>•</span> Dibangun sedikit demi sedikit, untuk hidup yang lebih teratur.</footer>
+  </main>
+</div>
+
+<style>
+  :global(*) { box-sizing: border-box; }
+  :global(body) {
+    margin: 0;
+    background: #f6f7fb;
+    color: #24243a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+  }
+  :global(button), :global(input) { font: inherit; }
+  .app { min-height: 100vh; }
+  .sidebar {
+    position: fixed; inset: 0 auto 0 0; width: 240px; padding: 27px 17px;
+    background: #fff; border-right: 1px solid #ececf3; display: flex; flex-direction: column;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: 18px; padding: 0 9px 35px; letter-spacing: -.5px; }
+  .brand-icon { width: 33px; height: 33px; display: grid; place-items: center; color: white; background: #7064df; border-radius: 11px; }
+  .menu-label, .eyebrow { font-size: 10px; letter-spacing: 1.5px; font-weight: 750; color: #9292a9; }
+  .menu-label { padding-left: 11px; margin-bottom: 12px; }
+  .nav { display: flex; gap: 13px; align-items: center; color: #77778e; text-decoration: none; padding: 12px 13px; border-radius: 10px; margin-bottom: 5px; font-size: 17px; }
+  .nav span { font-size: 13px; font-weight: 550; }
+  .nav.active { color: #6659d4; background: #f0efff; }
+  .sidebar-note { margin-top: auto; background: #f5f3ff; padding: 16px; border-radius: 13px; }
+  .note-icon { color: #7568df; font-size: 23px; margin-bottom: 9px; }
+  .sidebar-note strong { font-size: 12px; }
+  .sidebar-note p { color: #77778e; line-height: 1.6; font-size: 11px; margin-bottom: 0; }
+  .profile { display: flex; align-items: center; gap: 10px; padding: 20px 3px 0; }
+  .avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #e8e4ff; color: #6659d4; font-weight: 750; }
+  .profile strong, .profile small { display: block; font-size: 11px; }
+  .profile small { color: #9292a9; margin-top: 4px; }
+  .main { margin-left: 240px; padding: 31px clamp(20px, 4vw, 52px) 20px; max-width: 1600px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+  h1 { font-size: 27px; letter-spacing: -1px; margin: 7px 0 0; }
+  .today { background: white; border: 1px solid #ededf4; border-radius: 30px; padding: 10px 14px; color: #6f6f85; font-size: 12px; }
+  .today span { color: #6cbd94; font-size: 10px; margin-right: 5px; }
+  .welcome { min-height: 175px; border-radius: 17px; padding: 28px 31px; background: linear-gradient(105deg,#eae7ff,#f1efff 65%,#e5e1ff); position: relative; overflow: hidden; display: flex; align-items: center; }
+  .welcome-copy { position: relative; z-index: 2; max-width: 480px; }
+  .welcome-tag { color: #7669d5; font-size: 9px; font-weight: 800; letter-spacing: 1.7px; }
+  h2 { font-size: clamp(20px, 2.2vw, 27px); letter-spacing: -.8px; margin: 13px 0 9px; }
+  .welcome-copy p { color: #77758e; line-height: 1.7; margin: 0; font-size: 12px; }
+  .welcome-art { position: absolute; right: 6%; top: 0; width: 200px; height: 100%; }
+  .sun { position: absolute; width: 75px; height: 75px; right: 37px; top: 24px; border-radius: 50%; background: #d2c9ff; }
+  .hill { position: absolute; bottom: -47px; width: 210px; height: 120px; border-radius: 50% 50% 0 0; transform: rotate(-12deg); }
+  .hill-back { right: -55px; background: #d4ccff; }
+  .hill-front { right: 36px; bottom: -72px; background: #b8adf4; transform: rotate(15deg); }
+  .art-star { position: absolute; right: 140px; top: 35px; color: #8d7ce5; font-size: 23px; }
+  .stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 15px; margin: 20px 0; }
+  .stat-card, .panel { background: #fff; border: 1px solid #efeff5; border-radius: 14px; }
+  .stat-card { padding: 19px; min-width: 0; }
+  .stat-top { display: flex; justify-content: space-between; align-items: center; color: #77778e; font-size: 11px; gap: 7px; }
+  .stat-icon { width: 31px; height: 31px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; font-size: 15px; }
+  .purple { color: #7567dd; background: #f0edff; }
+  .green { color: #38a77c; background: #e5f7ee; }
+  .orange { color: #db9855; background: #fff1e4; }
+  .stat-number { font-size: clamp(21px,2.4vw,29px); font-weight: 750; letter-spacing: -1px; margin-top: 16px; }
+  .stat-number small { color: #9999ad; font-size: 13px; font-weight: 500; }
+  .stat-card p { color: #9696a9; font-size: 10px; margin: 10px 0 0; }
+  .progress { height: 5px; border-radius: 8px; background: #efedf9; margin-top: 12px; overflow: hidden; }
+  .progress span { display: block; height: 100%; background: #8173e7; border-radius: 8px; transition: width .2s; }
+  .stat-card .muted { margin-top: 15px; }
+  .content-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 16px; }
+  .panel { padding: 21px; min-width: 0; }
+  .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  h3 { font-size: 16px; margin: 7px 0 0; letter-spacing: -.3px; }
+  .count { background: #f0efff; color: #6f62d7; padding: 6px 9px; border-radius: 8px; font-size: 11px; }
+  .add-task { display: flex; gap: 8px; margin: 21px 0 12px; }
+  .add-task input { min-width: 0; flex: 1; border: 1px solid #ededf4; border-radius: 9px; padding: 11px; outline: none; font-size: 11px; }
+  .add-task input:focus { border-color: #9589ed; }
+  .add-task button { border: 0; width: 37px; border-radius: 9px; color: white; background: #7567dd; font-size: 23px; cursor: pointer; }
+  .task-row { display: flex; align-items: flex-start; gap: 11px; padding: 14px 0; border-bottom: 1px solid #f1f1f6; cursor: pointer; }
+  .task-row:last-child { border-bottom: 0; }
+  .task-row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .fake-check { width: 17px; height: 17px; flex-shrink: 0; border: 1.5px solid #d8d7e7; border-radius: 5px; display: grid; place-items: center; color: white; font-size: 11px; margin-top: 1px; }
+  .task-row input:checked + .fake-check { background: #7567dd; border-color: #7567dd; }
+  .task-text { font-size: 11px; line-height: 1.5; }
+  .task-text small { display: block; color: #a0a0b1; margin-top: 4px; font-size: 10px; }
+  .completed .task-text { text-decoration: line-through; color: #a3a3b4; }
+  .helper { font-size: 10px; color: #a0a0b1; margin: 10px 0 0; }
+  .focus-panel { background: #fbfaff; }
+  .focus-spark { color: #8476e6; font-size: 25px; }
+  .focus-circle { width: 128px; height: 128px; margin: 23px auto 17px; border-radius: 50%; background: conic-gradient(#8476e6 0%,#e9e5ff 0%); display: grid; place-items: center; position: relative; }
+  .focus-circle::before { content: ""; position: absolute; inset: 9px; background: #fbfaff; border-radius: 50%; }
+  .focus-circle div { position: relative; text-align: center; }
+  .focus-circle strong, .focus-circle small { display: block; }
+  .focus-circle strong { font-size: 25px; }
+  .focus-circle small { color: #9998ad; font-size: 8px; letter-spacing: 1px; margin-top: 4px; }
+  .focus-message { text-align: center; font-size: 11px; color: #77778e; line-height: 1.6; }
+  .focus-tip { display: flex; gap: 10px; background: #f0edff; border-radius: 10px; padding: 11px; color: #7265d2; margin-top: 18px; }
+  .focus-tip p { color: #77718f; font-size: 10px; line-height: 1.6; margin: 0; }
+  .finance-balance { background: #f6f4ff; padding: 17px; border-radius: 11px; margin: 20px 0 13px; }
+  .finance-balance small { display: block; color: #8986a4; font-size: 10px; }
+  .finance-balance strong { display: block; font-size: 26px; margin: 9px 0; }
+  .finance-balance p { color: #9693ad; font-size: 10px; line-height: 1.6; margin: 0; }
+  .finance-row { display: flex; justify-content: space-between; padding: 11px 1px; border-bottom: 1px solid #f1f1f6; font-size: 11px; }
+  .finance-row:last-child { border: 0; }
+  .finance-row span { color: #77778e; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 7px; }
+  .income { background: #52bd91; } .expense { background: #e9a568; } .savings { background: #8a7ce7; }
+  .savings-empty { text-align: center; padding: 23px 12px 5px; }
+  .savings-illustration { width: 54px; height: 54px; border-radius: 17px; background: #f0edff; color: #8273df; display: grid; place-items: center; font-size: 30px; margin: 0 auto 15px; }
+  .savings-empty strong { font-size: 12px; }
+  .savings-empty p { max-width: 235px; margin: 9px auto 15px; color: #9696a9; font-size: 10px; line-height: 1.7; }
+  .coming-soon { font-size: 8px; font-weight: 750; letter-spacing: 1px; color: #8273df; background: #f0edff; padding: 7px 10px; border-radius: 6px; }
+  footer { color: #a0a0b1; font-size: 9px; letter-spacing: .7px; padding: 23px 0 5px; }
+  footer span { color: #8273df; padding: 0 5px; }
+  @media (max-width: 900px) {
+    .sidebar { width: 190px; padding: 22px 12px; }
+    .main { margin-left: 190px; padding: 24px 20px; }
+    .content-grid { grid-template-columns: 1fr; }
+    .stats { gap: 9px; }
+    .stat-card { padding: 13px; }
+    .welcome-art { right: -30px; opacity: .7; }
+  }
+  @media (max-width: 600px) {
+    .sidebar { position: static; width: 100%; height: auto; padding: 13px 15px; border-right: 0; border-bottom: 1px solid #ececf3; }
+    .brand { padding: 0 2px 12px; }
+    .menu-label, .sidebar-note, .profile { display: none; }
+    .sidebar { display: block; }
+    .sidebar .nav { display: inline-flex; padding: 9px 10px; margin: 0 2px 0 0; gap: 6px; }
+    .nav span { font-size: 11px; }
+    .main { margin-left: 0; padding: 23px 15px; }
+    .topbar { align-items: flex-start; }
+    h1 { font-size: 24px; }
+    .today { font-size: 10px; padding: 9px; }
+    .welcome { padding: 23px 20px; min-height: 175px; }
+    .welcome-art { right: -105px; opacity: .35; }
+    .welcome-copy p { max-width: 260px; }
+    .stats { grid-template-columns: 1fr; }
+    .stat-card { padding: 17px; }
+    .stat-number { margin-top: 10px; }
+    .content-grid { gap: 13px; }
+    .panel { padding: 17px; }
+  }
+  
+/* Form jadwal dan tugas Personal OS */
+.add-task {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  align-items: start;
+}
+
+.add-task > input,
+.add-task > select,
+.add-task > label,
+.add-task > button,
+.add-task > .day-picker {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.add-task > input,
+.add-task > select,
+.add-task > label input,
+.add-task > label select {
+  max-width: 100%;
+}
+
+.add-task > label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 14px;
+}
+
+.add-task > label input,
+.add-task > label select {
+  padding: 11px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+}
+
+.add-task > .day-picker {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.day-picker label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.add-task > button {
+  grid-column: 1 / -1;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .add-task {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .add-task > .day-picker,
+  .add-task > button {
+    grid-column: 1;
+  }
+}
+
+/* Tampilan daftar tugas yang lebih rapi */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid #ececf3;
+  min-width: 0;
+}
+
+.task-row > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.task-row input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.task-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #292941;
+  line-height: 1.5;
+}
+
+.task-text small {
+  display: block;
+  color: #9293aa;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.task-actions button {
+  padding: 8px 12px;
+  border: 1px solid #e6e5f0;
+  border-radius: 9px;
+  background: white;
+  color: #5147a8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.task-actions button:hover {
+  background: #f1efff;
+}
+
+.task-actions button:last-child {
+  color: #b45353;
+}
+
+.task-actions button:last-child:hover {
+  background: #fff0f0;
+}
+
+.task-row:has(input[type="checkbox"]:checked) .task-text {
+  color: #a0a0b2;
+}
+
+@media (max-width: 600px) {
+  .task-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .task-actions {
+    padding-left: 30px;
+  }
+
+  .task-actions button {
+    padding: 7px 11px;
+  }
+}
+
+
+/* ===== PERSONAL OS: DESIGN UPDATE ===== */
+
+:global(body) {
+  background: #f7f7fc;
+  color: #24243a;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sidebar {
+  background: #ffffff;
+  border-right: 1px solid #ececf5;
+  box-shadow: 4px 0 24px rgba(40, 35, 90, 0.025);
+}
+
+.brand-icon {
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7665e8, #9585f5);
+  color: white;
+  box-shadow: 0 5px 14px rgba(118, 101, 232, 0.2);
+}
+
+.nav {
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 5px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.nav:hover {
+  background: #f6f4ff;
+  color: #6655d6;
+}
+
+.nav.active {
+  background: #f0edff;
+  color: #6655d6;
+  font-weight: 700;
+}
+
+.main {
+  padding-top: 36px;
+  padding-bottom: 48px;
+}
+
+.welcome,
+.today,
+.card,
+.panel,
+.stat-card {
+  border-radius: 22px;
+  box-shadow: 0 5px 24px rgba(40, 35, 90, 0.035);
+}
+
+.welcome {
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.6px;
+}
+
+button {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+input,
+select,
+textarea {
+  border-radius: 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #8b7cf0;
+  box-shadow: 0 0 0 3px rgba(139, 124, 240, 0.12);
+}
+
+.task-row {
+  border: 1px solid #eeedf6;
+  border-radius: 15px;
+  padding: 15px;
+  margin-bottom: 10px;
+  background: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-row:hover {
+  border-color: #dcd6ff;
+  box-shadow: 0 5px 16px rgba(40, 35, 90, 0.04);
+}
+
+.task-row input[type="checkbox"] {
+  accent-color: #7665e8;
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+}
+
+.task-actions button {
+  border-radius: 10px;
+}
+
+.sidebar-note {
+  border: 1px solid #eeebff;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f8f6ff, #ffffff);
+}
+
+@media (max-width: 800px) {
+  .main {
+    margin-left: 0;
+    padding: 22px 16px 36px;
+  }
+
+  .sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+  }
+
+  .task-row {
+    padding: 12px;
+  }
+}
+
+/* ===== RAPIIKAN FORM DAN DAFTAR TUGAS ===== */
+
+
+.task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  margin: 0 0 12px 0;
+  border: 1px solid #e8e5f5;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgba(70, 55, 130, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-row:hover {
+  border-color: #c9bfff;
+  box-shadow: 0 5px 16px rgba(70, 55, 130, 0.08);
+}
+
+.task-row label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-text {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.task-text small {
+  color: #85849f;
+  line-height: 1.6;
+}
+
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 0;
+}
+
+.task-actions button {
+  padding: 9px 15px;
+  border: 1px solid #e6e3f4;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.task-row:has(input[type="checkbox"]:checked) {
+  background: #faf9ff;
+  border-color: #ded8ff;
+}
+
+.task-row:has(input[type="checkbox"]:checked) .task-text {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+@media (max-width: 600px) {
+  .task-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 15px;
+  }
+
+  .task-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* Perbaikan final tampilan kartu tugas */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  margin: 0;
+  border: 1px solid #e6e4f5;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(60, 50, 120, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-row:hover {
+  border-color: #c9c0fa;
+  box-shadow: 0 5px 16px rgba(60, 50, 120, 0.08);
+}
+
+.task-row label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.task-text {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow-wrap: anywhere;
+}
+
+.task-text small {
+  display: block;
+  color: #85849e;
+  line-height: 1.6;
+}
+
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 0;
+}
+
+@media (max-width: 600px) {
+  .task-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .task-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* Perbaikan akhir tampilan kartu tugas */
+.task-list .task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  margin: 0 0 12px 0;
+  border: 1px solid #e8e5f5;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgba(70, 55, 130, 0.04);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.task-list .task-row > label {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-list .task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .task-list .task-row {
+    flex-wrap: wrap;
+    padding: 14px;
+  }
+
+  .task-list .task-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* FIX FINAL KARTU TUGAS PERSONAL OS */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.task-list .task-row {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid #e6e1fa;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgba(70, 55, 130, 0.05);
+}
+
+.task-list .task-row > label {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+  gap: 12px;
+}
+
+.task-list .task-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-list .task-text small {
+  display: block;
+  margin-top: 4px;
+  color: #85849e;
+  line-height: 1.6;
+}
+
+.task-list .task-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 8px;
+  padding-left: 0;
+}
+
+@media (max-width: 600px) {
+  .task-list .task-row {
+    flex-wrap: wrap;
+    padding: 14px;
+  }
+
+  .task-list .task-row > label {
+    flex-basis: 100%;
+  }
+
+  .task-list .task-actions {
+    width: 100%;
+  }
+}
+
+</style>
