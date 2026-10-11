@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
+  import { createClient } from '@supabase/supabase-js';
   const SUPABASE_URL = 'https://lnoytmlisurtijwatmjz.supabase.co';
   const SUPABASE_ANON_KEY = 'PASTE_ANON_KEY_PUBLIC_KAMU_DI_SINI';
 
